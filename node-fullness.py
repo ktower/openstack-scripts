@@ -54,17 +54,47 @@ def getInstCountTable(hlist):
 
     return instCountTable
 
+def getCPUTable(hlist):
+    """Given a shade.list_hypervisors() munch.Munch object. return a PrettyTable of CPu usage."""
+    cpuCount = 0
+    cpuUsed  = 0
+
+    cpuTable = PrettyTable(['Node', 'vCPUs', 'vCPUs Used', '% in use' ])
+    cpuTable.align['Node'] = 'r'
+    cpuTable.align['vCPUs'] = 'r'
+    cpuTable.align['vCPUs Used'] = 'r'
+    cpuTable.align['% in use'] = 'r'
+    cpuTable.float_format['% in use'] = '2.2'
+
+    for host in hlist:
+        cpuTable.add_row([host['hypervisor_hostname'],
+                          host['vcpus'],
+                          host['vcpus_used'],
+                          float(host['vcpus_used']) / float(host['vcpus']) * 100,
+                          ])
+        cpuCount += host['vcpus']
+        cpuUsed += host['vcpus_used']
+    
+    cpuTable.add_row(['--', '--', '--', '--'])
+    cpuTable.add_row(['TOTAL:',
+                       cpuCount,
+                       cpuUsed,
+                       float(cpuUsed) / float(cpuCount) * 100,
+                     ])
+    
+    return cpuTable
+
 def showHyperSum(hlist):
     """Given a shade.list_hypervisors() output munch.Munch object, summarize hypervisor usage."""
 
-    memTable = getMemTable(hlist)
-    instCountTable = getInstCountTable(hlist)
- 
     print("Memory Summary:")
-    print(memTable)
+    print(getMemTable(hlist))
 
     print("Instance Count:")
-    print(instCountTable)
+    print(getInstCountTable(hlist))
+
+    print("CPU Usage Summary")
+    print(getCPUTable(hlist))
 
 def main():
     """The Main Program"""
