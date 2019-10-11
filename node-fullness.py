@@ -3,6 +3,18 @@
 import shade
 from prettytable import PrettyTable
 
+def getHyperSummTable(hlist):
+    """Given a shade.list_hypervisors() output munch.Munch object, return a PrettyTable of hypervisor info."""
+
+    hyperInfoTable = PrettyTable(['Node', 'Hyper Type', 'Hyper Version', 'State', 'Status'])
+    for host in hlist:
+        hyperInfoTable.add_row([host['hypervisor_hostname'],
+                                host['hypervisor_type'],
+                                host['hypervisor_version'], 
+                                host['state'],
+                                host['status'],
+                                ])
+    return hyperInfoTable
 
 def getMemTable(hlist):
     """Given a shade.list_hypervisors() output munch.Munch object, return a PrettyTable of memory usage."""
@@ -86,6 +98,9 @@ def getCPUTable(hlist):
 
 def showHyperSum(hlist):
     """Given a shade.list_hypervisors() output munch.Munch object, summarize hypervisor usage."""
+
+    print("Hypervisor Summary:")
+    print(getHyperSummTable(hlist))
 
     print("Memory Summary:")
     print(getMemTable(hlist))
