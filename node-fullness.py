@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-import os_client_config, shade
+import shade
 from prettytable import PrettyTable
 
 
@@ -60,11 +60,11 @@ def showHyperSum(hlist):
     memTable = getMemTable(hlist)
     instCountTable = getInstCountTable(hlist)
  
-    print "Memory Summary:"
-    print memTable
+    print("Memory Summary:")
+    print(memTable)
 
-    print "Instance Count:"
-    print instCountTable
+    print("Instance Count:")
+    print(instCountTable)
 
 def main():
     """The Main Program"""
