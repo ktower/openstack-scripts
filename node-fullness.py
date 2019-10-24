@@ -28,7 +28,10 @@ def getMemTable(hlist):
     memTable.align['Mem in-use (GB)'] = 'r'
     memTable.align['Mem Free (GB)'] = 'r'
     memTable.align['Mem % in-use'] = 'r'
-    memTable.float_format['Mem % in-use'] = '2.2'
+    memTable.float_format['Total Mem (GB)'] = '5.1'
+    memTable.float_format['Mem in-use (GB)'] = '4.1'
+    memTable.float_format['Mem Free (GB)'] = '4.1'
+    memTable.float_format['Mem % in-use'] = '2.1'
     
     for host in hlist:
         memTable.add_row([host['hypervisor_hostname'], 
