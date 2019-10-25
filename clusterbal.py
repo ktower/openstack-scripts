@@ -68,7 +68,7 @@ class osHypervisor:
         if not self.__vmDict:
             print("WARNING: There are currently no instances assigned to {}".format(self.getName()))
             return False
-        return random.choice(self.__vmDict.keys())
+        return random.choice(list(self.__vmDict.keys()))
     def getInstRam(self, id):
         """Given instance defined with id, return the amount of memory allocated to it.  If instance doesn't exist, return 0."""
         if not self.doesInstanceExist(id):
