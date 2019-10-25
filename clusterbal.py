@@ -25,8 +25,11 @@ class osHypervisor:
     __hostCurMemMB   = 0     # How much memory, in MB, the host is currently using
     __hostNewMemMB   = 0     # How much memory, in MB, the host will be using if plan is executed
 
-    def __init__(self, name):
+    def __init__(self, name, totmem, curmem):
         self.__name = name
+        self.__hostTotalMB = totmem
+        self.__hostCurMemMB = curmem
+        self.__hostNewMemMB = curmem
     
     def getName(self):
         """Return the hypervisor name."""
@@ -60,7 +63,11 @@ class osHypervisor:
                 self.__hostNewMemMB = self.__hostNewMemMB - self.getInstRam(id)
             del self.__vmDict[id]
     def getRandInst(self):
-        """Return a random instance ID from the list of existing instances on the server."""
+        """Return a random instance ID from the list of existing instances on the server.
+           Returns false if none exist."""
+        if not self.__vmDict:
+            print("WARNING: There are currently no instances assigned to {}".format(self.getName()))
+            return False
         return random.choice(self.__vmDict.keys())
     def getInstRam(self, id):
         """Given instance defined with id, return the amount of memory allocated to it.  If instance doesn't exist, return 0."""
@@ -103,18 +110,21 @@ class flavorCache:
             print("WARNING: Flavor {} already exists in flavor cache.  It will be overwritten.".format(flavid))
         self.__flavors[flavid] = { 'name': name, 'ram': ram, 'vcpus': vcpus, 'disk': disk, 'ephemeral': ephemeral }
 
-    
-def getFlavors(mycloud):
-    """Given a cloud instance mycloud, return a dict of flavors that looks like the following:
-       ['flavor_uuid'] = {}"""
+
+HypervisorDict = {} # Store osHyperVisor objects here, keyed on hypervisor hostname
+Flavors = flavorCache()
+
+def getHypervisors(cloud):
+    """Get hypervisors and add them to HypervisorDict."""
+    for host in cloud.list_hypervisors():
+        hinfo = osHypervisor(host['hypervisor_hostname'], host['memory_mb'], host['memory_mb_used'])
+        HypervisorDict[host['hypervisor_hostname']] = hinfo
+
 
 def main():
     """The main program here."""
     cloud = shade.OpenStackCloud()
-
-    #flavormap = getFlavors(cloud)
-
-
+    getHypervisors(cloud)
 
 if __name__ == "__main__":
     main()
