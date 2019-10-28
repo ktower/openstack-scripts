@@ -146,9 +146,9 @@ def getFullestHyperMem():
     biggestname=None
     biggestpct=0.0
     for vm in HypervisorDict.keys():
-        if HypervisorDict[vm].getCurPctFull() > biggestpct:
+        if HypervisorDict[vm].getNewPctFull() > biggestpct:
             biggestname=vm
-            biggestpct=HypervisorDict[vm].getCurPctFull()
+            biggestpct=HypervisorDict[vm].getNewPctFull()
     return (biggestname, biggestpct)
 
 def getEmptiestHyperMem():
@@ -156,14 +156,14 @@ def getEmptiestHyperMem():
     smallestname=None
     smallestpct=1.0
     for vm in HypervisorDict.keys():
-        if HypervisorDict[vm].getCurPctFull() < smallestpct:
+        if HypervisorDict[vm].getNewPctFull() < smallestpct:
             smallestname=vm
-            smallestpct=HypervisorDict[vm].getCurPctFull()
+            smallestpct=HypervisorDict[vm].getNewPctFull()
     return (smallestname, smallestpct)
 
 def getPctDiff(pct1, pct2):
     """Given two percentages (float value 0 < n < 1), return the percent different between the two."""
-    return abs(pct1 / pct2) / pct1
+    return abs(pct1 - pct2) / pct1
 
 def main():
     """The main program here."""
@@ -192,6 +192,32 @@ def main():
     
     ## TODO: Interatively pick random VM from most full hypervisor to move to least full
     ## TODO: Repeat until all hypervisors are within ~n percent of each other.
+    failsafect=0
+    (smallesthyper, smallestpct) = getEmptiestHyperMem()
+    (biggesthyper, biggestpct) = getFullestHyperMem()
+    while getPctDiff(biggestpct, smallestpct) > TOLERANCE and failsafect < 20:
+        if DEBUG:
+            print("Hypervisor spread is {} percent, looking for VM to move from {} to {}...".format(getPctDiff(biggestpct,smallestpct), biggesthyper, smallesthyper))
+        # Find an instance to move
+        bighypercfg=HypervisorDict[biggesthyper]   # Is reference to osHypervisor object
+        smallhypercfg=HypervisorDict[smallesthyper]
+
+        vmtomove=bighypercfg.getRandInst()  # Is VM UUID
+        vmtomovemem=bighypercfg.getInstRam(vmtomove)
+        if DEBUG:
+            print("Found {} ({} MB)".format(vmtomove, vmtomovemem))
+
+        # Move instance from fullest to newest node
+        # TODO: retain more than UUID and memory size.
+        bighypercfg.rmInstance(vmtomove, modifymemory=True)
+        smallhypercfg.addInstance(vmtomove, ram=vmtomovemem, modifymemory=True)
+
+        # TODO: Record to plan for later output
+
+        # Update biggest/smallest and try again
+        (smallesthyper, smallestpct) = getEmptiestHyperMem()
+        (biggesthyper, biggestpct) = getFullestHyperMem()
+        failsafect += 1
 
     
     ## TODO: Output plan and quit
