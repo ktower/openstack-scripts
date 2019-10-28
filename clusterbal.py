@@ -110,14 +110,14 @@ class flavorCache:
 DEBUG=True      # Add extra messages?
 TOLERANCE=0.10  # How close in fullness percentage the hypervisors should be
 
-HypervisorList = [] # Store osHyperVisor objects here
+HypervisorDict = {} # Store osHyperVisor objects here
 Flavors = flavorCache()
 
 def getHypervisors(cloud):
     """Get hypervisors and add them to HypervisorList."""
     for host in cloud.list_hypervisors():
         hinfo = osHypervisor(host['hypervisor_hostname'], host['memory_mb'], host['memory_mb_used'])
-        HypervisorList.append(hinfo)
+        HypervisorDict[host['hypervisor_hostname']] = (hinfo)
 
 def getFlavorInfo(cloud, flavor):
     """Given a flavor in cloud, return a tuple of data about it: [ram, vcpus, disk, ephemeral ].
@@ -139,7 +139,6 @@ def getFlavorInfo(cloud, flavor):
              Flavors.getFlavorResource(flavor, 'vcpus'),
              Flavors.getFlavorResource(flavor, 'disk')
             ]
-                  
 
 def main():
     """The main program here."""
@@ -149,17 +148,18 @@ def main():
     getHypervisors(cloud)
 
     ## Populate VM data for each hypervisor
-    for hyper in HypervisorList:
-        slist=cloud.list_servers(all_projects=True, bare=True, filters={'host': hyper.getName()})
+    for hyper in HypervisorDict.keys():
+        hname = HypervisorDict[hyper].getName()
+        slist=cloud.list_servers(all_projects=True, bare=True, filters={'host': hname})
         for s in slist:
             sid     = s['id']
             sname   = s['name']
             sflavor = s['flavor']['id']
             [ sram, svcpus, sdisk ] = getFlavorInfo(cloud, sflavor)
             if DEBUG:
-                print("Adding {} to {}'s instance list".format(sname, hyper.getName()))
+                print("Adding {} to {}'s instance list".format(sname, hname))
             # Don't modify hypervisor memory; we already have a total
-            hyper.addInstance(sid, name=sname, ram=sram, vcpus=svcpus, disk=sdisk, modifymemory=False)
+            HypervisorDict[hyper].addInstance(sid, name=sname, ram=sram, vcpus=svcpus, disk=sdisk, modifymemory=False)
 
     
     ## TODO: Interatively pick random VM from most full hypervisor to move to least full
