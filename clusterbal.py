@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import shade
 import random
 
@@ -135,17 +136,44 @@ def getFlavorInfo(cloud, flavor):
         fephem   = flavinfo['ephemeral']
         Flavors.addFlavor(flavor, name=fname, ram=fram, vcpus=fvcpus, disk=fdisk, ephemeral=fephem)
     
-    return [ Flavors.getFlavorResource(flavor, 'ram'),
+    return ( Flavors.getFlavorResource(flavor, 'ram'),
              Flavors.getFlavorResource(flavor, 'vcpus'),
              Flavors.getFlavorResource(flavor, 'disk')
-            ]
+           )
+
+def getFullestHyperMem():
+    """Returns the (name, percentage) of the hypervisor with the most "current" in-use memory."""
+    biggestname=None
+    biggestpct=0.0
+    for vm in HypervisorDict.keys():
+        if HypervisorDict[vm].getCurPctFull() > biggestpct:
+            biggestname=vm
+            biggestpct=HypervisorDict[vm].getCurPctFull()
+    return (biggestname, biggestpct)
+
+def getEmptiestHyperMem():
+    """Returns the (name, percentage) of the hypervisor with the least "current" in-use memory."""
+    smallestname=None
+    smallestpct=1.0
+    for vm in HypervisorDict.keys():
+        if HypervisorDict[vm].getCurPctFull() < smallestpct:
+            smallestname=vm
+            smallestpct=HypervisorDict[vm].getCurPctFull()
+    return (smallestname, smallestpct)
+
+def getPctDiff(pct1, pct2):
+    """Given two percentages (float value 0 < n < 1), return the percent different between the two."""
+    return abs(pct1 / pct2) / pct1
 
 def main():
     """The main program here."""
     cloud = shade.OpenStackCloud()
 
     # Get basic information about our hypervisors, and store into global list "HypervisorList"
-    getHypervisors(cloud)
+    try:
+        getHypervisors(cloud)
+    except:
+        sys.exit("Unable to retrive list of cluster hypervisors.  Ensure you are connecting as a cloud admin and try again.")
 
     ## Populate VM data for each hypervisor
     for hyper in HypervisorDict.keys():
@@ -155,7 +183,7 @@ def main():
             sid     = s['id']
             sname   = s['name']
             sflavor = s['flavor']['id']
-            [ sram, svcpus, sdisk ] = getFlavorInfo(cloud, sflavor)
+            ( sram, svcpus, sdisk ) = getFlavorInfo(cloud, sflavor)
             if DEBUG:
                 print("Adding {} to {}'s instance list".format(sname, hname))
             # Don't modify hypervisor memory; we already have a total
@@ -164,6 +192,8 @@ def main():
     
     ## TODO: Interatively pick random VM from most full hypervisor to move to least full
     ## TODO: Repeat until all hypervisors are within ~n percent of each other.
+
+    
     ## TODO: Output plan and quit
 
 if __name__ == "__main__":
