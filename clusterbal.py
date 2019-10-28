@@ -110,7 +110,6 @@ class flavorCache:
             print("WARNING: Flavor {} already exists in flavor cache.  It will be overwritten.".format(flavid))
         self.__flavors[flavid] = { 'name': name, 'ram': ram, 'vcpus': vcpus, 'disk': disk, 'ephemeral': ephemeral }
 
-
 HypervisorDict = {} # Store osHyperVisor objects here, keyed on hypervisor hostname
 Flavors = flavorCache()
 
@@ -125,6 +124,11 @@ def main():
     """The main program here."""
     cloud = shade.OpenStackCloud()
     getHypervisors(cloud)
+    ## TODO: Populate VM data for each hypervisor
+    
+    ## TODO: Interatively pick random VM from most full hypervisor to move to least full
+    ## TODO: Repeat until all hypervisors are within ~n percent of each other.
+    ## TODO: Output plan and quit
 
 if __name__ == "__main__":
     main()
