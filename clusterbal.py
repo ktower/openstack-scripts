@@ -3,6 +3,7 @@
 import sys
 import shade
 import random
+from prettytable import PrettyTable
 
 # This script will produce a list of live migration commands to run in order to better balance
 # an OpenStack cluster's workload evenly across all nodes.
@@ -109,7 +110,7 @@ class flavorCache:
         self.__flavors[flavid] = { 'name': name, 'ram': ram, 'vcpus': vcpus, 'disk': disk, 'ephemeral': ephemeral }
 
 DEBUG=True      # Add extra messages?
-TOLERANCE=0.10  # How close in fullness percentage the hypervisors should be
+TOLERANCE=0.05  # How close in fullness percentage the hypervisors should be
 
 HypervisorDict = {} # Store osHyperVisor objects here
 Flavors = flavorCache()
@@ -165,9 +166,25 @@ def getPctDiff(pct1, pct2):
     """Given two percentages (float value 0 < n < 1), return the percent different between the two."""
     return abs(pct1 - pct2) / pct1
 
+def getMigSummTable(hinfodict):
+    """Returns a pretty table summarizing the hypervisors before and after."""
+    htable = PrettyTable(['Node', 'Before', 'After', 'Final inst count'])
+    htable.align['Before'] = 'r'
+    htable.align['After'] = 'r'
+    htable.align['Final inst count'] = 'r'
+    for h in sorted(hinfodict.keys()):
+        htable.add_row([hinfodict[h].getName(),
+                          "{0:3.1f} %".format(hinfodict[h].getCurPctFull() * 100),
+                          "{0:3.1f} %".format(hinfodict[h].getNewPctFull() * 100),
+                          hinfodict[h].getNumInDict()]
+                        )
+    
+    return htable
+
 def main():
     """The main program here."""
     cloud = shade.OpenStackCloud()
+    PlanList = [] # List of actions to take, in tuple form: (srchyper, desthyper, instance_id, memsize)
 
     # Get basic information about our hypervisors, and store into global list "HypervisorList"
     try:
@@ -190,14 +207,13 @@ def main():
             HypervisorDict[hyper].addInstance(sid, name=sname, ram=sram, vcpus=svcpus, disk=sdisk, modifymemory=False)
 
     
-    ## TODO: Interatively pick random VM from most full hypervisor to move to least full
-    ## TODO: Repeat until all hypervisors are within ~n percent of each other.
-    failsafect=0
+    ## Interatively pick random VM from most full hypervisor to move to least full
+    ## Repeat until all hypervisors are within ~n percent of each other.
     (smallesthyper, smallestpct) = getEmptiestHyperMem()
     (biggesthyper, biggestpct) = getFullestHyperMem()
-    while getPctDiff(biggestpct, smallestpct) > TOLERANCE and failsafect < 20:
+    while getPctDiff(biggestpct, smallestpct) > TOLERANCE:
         if DEBUG:
-            print("Hypervisor spread is {} percent, looking for VM to move from {} to {}...".format(getPctDiff(biggestpct,smallestpct), biggesthyper, smallesthyper))
+            print("Hypervisor spread is {0:3.1f} percent, looking for VM to move from {1} to {2}...".format(getPctDiff(biggestpct,smallestpct) * 100, biggesthyper, smallesthyper))
         # Find an instance to move
         bighypercfg=HypervisorDict[biggesthyper]   # Is reference to osHypervisor object
         smallhypercfg=HypervisorDict[smallesthyper]
@@ -212,15 +228,25 @@ def main():
         bighypercfg.rmInstance(vmtomove, modifymemory=True)
         smallhypercfg.addInstance(vmtomove, ram=vmtomovemem, modifymemory=True)
 
-        # TODO: Record to plan for later output
+        # Record to plan for later output
+        PlanList.append((biggesthyper, smallesthyper, vmtomove, vmtomovemem))
 
         # Update biggest/smallest and try again
         (smallesthyper, smallestpct) = getEmptiestHyperMem()
         (biggesthyper, biggestpct) = getFullestHyperMem()
-        failsafect += 1
 
     
-    ## TODO: Output plan and quit
+    ## Output plan and quit
+    print("### Plan calculated.  Output follows:")
+    for mig in PlanList:
+        # mig: (srchyper, desthyper, instance_id, memsize)
+        print("# migrate {0} MB instance from {1} to {2}".format(mig[3], mig[0], mig[1]))
+        print("openstack server migrate --live {0} --wait {1}".format(mig[1], mig[2]))
+
+    print("### Plan Summary:")
+    print("### Total migrations: {0}".format(len(PlanList)))
+    print(getMigSummTable(HypervisorDict))
+
 
 if __name__ == "__main__":
     main()
