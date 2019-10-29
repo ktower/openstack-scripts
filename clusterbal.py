@@ -3,6 +3,7 @@
 import sys
 import shade
 import random
+import argparse
 from prettytable import PrettyTable
 
 # This script will produce a list of live migration commands to run in order to better balance
@@ -109,10 +110,23 @@ class flavorCache:
             print("WARNING: Flavor {} already exists in flavor cache.  It will be overwritten.".format(flavid))
         self.__flavors[flavid] = { 'name': name, 'ram': ram, 'vcpus': vcpus, 'disk': disk, 'ephemeral': ephemeral }
 
-DEBUG=True      # Add extra messages?
+# Define a couple of globals
+DEBUG=False      # Add debugging messages?
+VERBOSE=False    # Be chatty?
 
-def getHypervisors(cloud, hdict):
-    """Get hypervisors and add them to hdict, a reference to a list of osHypervisor objects."""
+def parseArgs():
+    parser = argparse.ArgumentParser(description="Rebalance an OpenStack cluster's compute nodes")
+    parser.add_argument('-v', '--verbose', action='store_true', help="Enable verbose mode")
+    parser.add_argument('-d', '--debug', action='store_true', help="Enable debug output")
+    parser.add_argument('-t', '--tolerance', action='store', default=0.05, type=float, help="The max percent difference between fullest and emptiest nodes (default=0.05)")
+    parser.add_argument('-c', '--compute', action='append', help="Limit calculations to a set of compute nodes (can be repeated)")
+    args = parser.parse_args()
+    return args
+
+
+def getHypervisors(cloud, hdict, limithosts=None):
+    """Get hypervisors and add them to hdict, a reference to a list of osHypervisor objects.
+       If limithosts is given a list of names, limit the hypervisor list to those names."""
     for host in cloud.list_hypervisors():
         hinfo = osHypervisor(host['hypervisor_hostname'], host['memory_mb'], host['memory_mb_used'])
         hdict[host['hypervisor_hostname']] = (hinfo)
@@ -178,16 +192,34 @@ def getMigSummTable(hinfodict):
     return htable
 
 def main():
-    """The main program here."""
+    """The main program."""
     cloud          = shade.OpenStackCloud()  # Cloud connection object
     HypervisorDict = {} # Store osHyperVisor objects here
     PlanList       = [] # List of actions to take, in tuple form: (srchyper, desthyper, instance_id, memsize)
     Flavors        = flavorCache()  # A cache of flavor definitions
     tolerance      = 0.05  # How close in fullness percentage the hypervisors should be
 
+    # Parse command line options
+    myargs = parseArgs()
+    tolerance = myargs.tolerance
+    if myargs.verbose:
+        print("## Verbose mode selected")
+        VERBOSE = True
+    else:
+        VERBOSE = False
+    if myargs.debug:
+        print("## Debug mode selected")
+        DEBUG = True
+    else:
+        DEBUG = False
+
     # Get basic information about our hypervisors, and store into global list "HypervisorList"
+    if VERBOSE and myargs.compute:
+        print("Limiting hypervisor selection to: {}".format(myargs.compute))
+
+    sys.exit(0)
     try:
-        getHypervisors(cloud, HypervisorDict)
+        getHypervisors(cloud, HypervisorDict, limithosts=args.compute)
     except:
         sys.exit("Unable to retrive list of cluster hypervisors.  Ensure you are connecting as a cloud admin and try again.")
 
@@ -245,7 +277,6 @@ def main():
     print("### Plan Summary:")
     print("### Total migrations: {0}".format(len(PlanList)))
     print(getMigSummTable(HypervisorDict))
-
 
 if __name__ == "__main__":
     main()
