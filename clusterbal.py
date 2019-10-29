@@ -111,13 +111,11 @@ class flavorCache:
 
 DEBUG=True      # Add extra messages?
 
-HypervisorDict = {} # Store osHyperVisor objects here
-
-def getHypervisors(cloud):
-    """Get hypervisors and add them to HypervisorList."""
+def getHypervisors(cloud, hdict):
+    """Get hypervisors and add them to hdict, a reference to a list of osHypervisor objects."""
     for host in cloud.list_hypervisors():
         hinfo = osHypervisor(host['hypervisor_hostname'], host['memory_mb'], host['memory_mb_used'])
-        HypervisorDict[host['hypervisor_hostname']] = (hinfo)
+        hdict[host['hypervisor_hostname']] = (hinfo)
 
 def getFlavorInfo(cloud, fcache, flavor):
     """Given a flavor in cloud, return a tuple of data about it: [ram, vcpus, disk, ephemeral ].
@@ -140,24 +138,24 @@ def getFlavorInfo(cloud, fcache, flavor):
              fcache.getFlavorResource(flavor, 'disk')
            )
 
-def getFullestHyperMem():
+def getFullestHyperMem(hdict):
     """Returns the (name, percentage) of the hypervisor with the most "current" in-use memory."""
     biggestname=None
     biggestpct=0.0
-    for vm in HypervisorDict.keys():
-        if HypervisorDict[vm].getNewPctFull() > biggestpct:
+    for vm in hdict.keys():
+        if hdict[vm].getNewPctFull() > biggestpct:
             biggestname=vm
-            biggestpct=HypervisorDict[vm].getNewPctFull()
+            biggestpct=hdict[vm].getNewPctFull()
     return (biggestname, biggestpct)
 
-def getEmptiestHyperMem():
+def getEmptiestHyperMem(hdict):
     """Returns the (name, percentage) of the hypervisor with the least "current" in-use memory."""
     smallestname=None
     smallestpct=1.0
-    for vm in HypervisorDict.keys():
-        if HypervisorDict[vm].getNewPctFull() < smallestpct:
+    for vm in hdict.keys():
+        if hdict[vm].getNewPctFull() < smallestpct:
             smallestname=vm
-            smallestpct=HypervisorDict[vm].getNewPctFull()
+            smallestpct=hdict[vm].getNewPctFull()
     return (smallestname, smallestpct)
 
 def getPctDiff(pct1, pct2):
@@ -181,14 +179,15 @@ def getMigSummTable(hinfodict):
 
 def main():
     """The main program here."""
-    cloud = shade.OpenStackCloud()
-    PlanList = [] # List of actions to take, in tuple form: (srchyper, desthyper, instance_id, memsize)
-    Flavors = flavorCache()  # A cache of flavor definitions
-    TOLERANCE=0.05  # How close in fullness percentage the hypervisors should be
+    cloud          = shade.OpenStackCloud()  # Cloud connection object
+    HypervisorDict = {} # Store osHyperVisor objects here
+    PlanList       = [] # List of actions to take, in tuple form: (srchyper, desthyper, instance_id, memsize)
+    Flavors        = flavorCache()  # A cache of flavor definitions
+    tolerance      = 0.05  # How close in fullness percentage the hypervisors should be
 
     # Get basic information about our hypervisors, and store into global list "HypervisorList"
     try:
-        getHypervisors(cloud)
+        getHypervisors(cloud, HypervisorDict)
     except:
         sys.exit("Unable to retrive list of cluster hypervisors.  Ensure you are connecting as a cloud admin and try again.")
 
@@ -209,9 +208,9 @@ def main():
     
     ## Interatively pick random VM from most full hypervisor to move to least full
     ## Repeat until all hypervisors are within ~n percent of each other.
-    (smallesthyper, smallestpct) = getEmptiestHyperMem()
-    (biggesthyper, biggestpct) = getFullestHyperMem()
-    while getPctDiff(biggestpct, smallestpct) > TOLERANCE:
+    (smallesthyper, smallestpct) = getEmptiestHyperMem(HypervisorDict)
+    (biggesthyper, biggestpct) = getFullestHyperMem(HypervisorDict)
+    while getPctDiff(biggestpct, smallestpct) > tolerance:
         if DEBUG:
             print("Hypervisor spread is {0:3.1f} percent, looking for VM to move from {1} to {2}...".format(getPctDiff(biggestpct,smallestpct) * 100, biggesthyper, smallesthyper))
         # Find an instance to move
@@ -232,8 +231,8 @@ def main():
         PlanList.append((biggesthyper, smallesthyper, vmtomove, vmtomovemem))
 
         # Update biggest/smallest and try again
-        (smallesthyper, smallestpct) = getEmptiestHyperMem()
-        (biggesthyper, biggestpct) = getFullestHyperMem()
+        (smallesthyper, smallestpct) = getEmptiestHyperMem(HypervisorDict)
+        (biggesthyper, biggestpct) = getFullestHyperMem(HypervisorDict)
 
     
     ## Output plan and quit
