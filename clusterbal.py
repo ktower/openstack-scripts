@@ -17,7 +17,6 @@ from prettytable import PrettyTable
 # 3) At this time the script only provides advised actions.  No actual migrations will occur.
 
 class osHypervisor:
-
     """A class that describes an OpenStack hypervisor and a list of all the instances running on it."""
 
     def __init__(self, name, totmem, curmem):
@@ -116,20 +115,36 @@ VERBOSE=False    # Be chatty?
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Rebalance an OpenStack cluster's compute nodes")
-    parser.add_argument('-v', '--verbose', action='store_true', help="Enable verbose mode")
+    outputcontrol = parser.add_mutually_exclusive_group()
+    outputcontrol.add_argument('-v', '--verbose', action='store_true', help="Enable verbose mode")
+    outputcontrol.add_argument('-b', '--bare', action='store_true', help="Only output migrate commands, no summary or comments.")
     parser.add_argument('-d', '--debug', action='store_true', help="Enable debug output")
     parser.add_argument('-t', '--tolerance', action='store', default=0.05, type=float, help="The max percent difference between fullest and emptiest nodes (default=0.05)")
     parser.add_argument('-c', '--compute', action='append', help="Limit calculations to a set of compute nodes (can be repeated)")
     args = parser.parse_args()
     return args
 
+def printdebug(msg):
+    """Print a debug message, if debug flag is enabled."""
+    global DEBUG
+    if DEBUG:
+        print("# DEBUG: {}".format(msg))
+
+def printverbose(msg):
+    """Print a verbose message, if VERBOSE flag is enabled."""
+    global VERBOSE
+    if VERBOSE:
+        print("## {}".format(msg))
 
 def getHypervisors(cloud, hdict, limithosts=None):
     """Get hypervisors and add them to hdict, a reference to a list of osHypervisor objects.
        If limithosts is given a list of names, limit the hypervisor list to those names."""
     for host in cloud.list_hypervisors():
-        hinfo = osHypervisor(host['hypervisor_hostname'], host['memory_mb'], host['memory_mb_used'])
-        hdict[host['hypervisor_hostname']] = (hinfo)
+        hname = host['hypervisor_hostname']
+        # If a host list is provided, only add a host if it is present
+        if (not limithosts) or (limithosts and hname in limithosts):
+            hinfo = osHypervisor(hname, host['memory_mb'], host['memory_mb_used'])
+            hdict[hname] = (hinfo)
 
 def getFlavorInfo(cloud, fcache, flavor):
     """Given a flavor in cloud, return a tuple of data about it: [ram, vcpus, disk, ephemeral ].
@@ -137,8 +152,7 @@ def getFlavorInfo(cloud, fcache, flavor):
        flavors we already have looked up."""
     if not fcache.flavorExists(flavor):
         # Need to look up the flavor via the API instead.
-        if DEBUG:
-            print("Issuing API call to look up flavor {}".format(flavor))
+        printdebug("Issuing API call to look up flavor {}".format(flavor))
         flavinfo = cloud.get_flavor(flavor)
         fname    = flavinfo['name']
         fram     = flavinfo['ram']
@@ -193,6 +207,9 @@ def getMigSummTable(hinfodict):
 
 def main():
     """The main program."""
+    global VERBOSE
+    global DEBUG
+    baremode       = False  # If true, only output the openstack migration commands
     cloud          = shade.OpenStackCloud()  # Cloud connection object
     HypervisorDict = {} # Store osHyperVisor objects here
     PlanList       = [] # List of actions to take, in tuple form: (srchyper, desthyper, instance_id, memsize)
@@ -212,47 +229,52 @@ def main():
         DEBUG = True
     else:
         DEBUG = False
+    if myargs.bare:
+        baremode = True
+    else:
+        baremode = False
 
     # Get basic information about our hypervisors, and store into global list "HypervisorList"
-    if VERBOSE and myargs.compute:
-        print("Limiting hypervisor selection to: {}".format(myargs.compute))
-
-    sys.exit(0)
+    printdebug("Limiting hypervisor selection to: {}".format(myargs.compute))
     try:
-        getHypervisors(cloud, HypervisorDict, limithosts=args.compute)
+        printverbose("Obtaining list of hypervisors")
+        getHypervisors(cloud, HypervisorDict, limithosts=myargs.compute)
     except:
-        sys.exit("Unable to retrive list of cluster hypervisors.  Ensure you are connecting as a cloud admin and try again.")
+        sys.exit("## Unable to retrive list of cluster hypervisors.  Ensure you are connecting as a cloud admin and try again.")
+
+    if len(HypervisorDict) < 1:
+        sys.exit("## No hypervisors matched.  Aborting.")
 
     ## Populate VM data for each hypervisor
+    printverbose("Inventorying instances")
     for hyper in HypervisorDict.keys():
         hname = HypervisorDict[hyper].getName()
+        printverbose("Finding all instances on {}".format(hname))
         slist=cloud.list_servers(all_projects=True, bare=True, filters={'host': hname})
         for s in slist:
             sid     = s['id']
             sname   = s['name']
             sflavor = s['flavor']['id']
             ( sram, svcpus, sdisk ) = getFlavorInfo(cloud, Flavors, sflavor)
-            if DEBUG:
-                print("Adding {} to {}'s instance list".format(sname, hname))
+            printdebug("Adding {} to {}'s instance list".format(sname, hname))
             # Don't modify hypervisor memory; we already have a total
             HypervisorDict[hyper].addInstance(sid, name=sname, ram=sram, vcpus=svcpus, disk=sdisk, modifymemory=False)
 
     
     ## Interatively pick random VM from most full hypervisor to move to least full
     ## Repeat until all hypervisors are within ~n percent of each other.
+    printverbose("Generating migration plan")
     (smallesthyper, smallestpct) = getEmptiestHyperMem(HypervisorDict)
     (biggesthyper, biggestpct) = getFullestHyperMem(HypervisorDict)
     while getPctDiff(biggestpct, smallestpct) > tolerance:
-        if DEBUG:
-            print("Hypervisor spread is {0:3.1f} percent, looking for VM to move from {1} to {2}...".format(getPctDiff(biggestpct,smallestpct) * 100, biggesthyper, smallesthyper))
+        printdebug("Hypervisor spread is {0:3.1f} percent, looking for VM to move from {1} to {2}...".format(getPctDiff(biggestpct,smallestpct) * 100, biggesthyper, smallesthyper))
         # Find an instance to move
         bighypercfg=HypervisorDict[biggesthyper]   # Is reference to osHypervisor object
         smallhypercfg=HypervisorDict[smallesthyper]
 
         vmtomove=bighypercfg.getRandInst()  # Is VM UUID
         vmtomovemem=bighypercfg.getInstRam(vmtomove)
-        if DEBUG:
-            print("Found {} ({} MB)".format(vmtomove, vmtomovemem))
+        printdebug("Found {} ({} MB)".format(vmtomove, vmtomovemem))
 
         # Move instance from fullest to newest node
         # TODO: retain more than UUID and memory size.
@@ -268,15 +290,17 @@ def main():
 
     
     ## Output plan and quit
-    print("### Plan calculated.  Output follows:")
+    printverbose("Plan calculated.  Output follows:")
     for mig in PlanList:
         # mig: (srchyper, desthyper, instance_id, memsize)
-        print("# migrate {0} MB instance from {1} to {2}".format(mig[3], mig[0], mig[1]))
+        if not baremode:
+            print("# migrate {0} MB instance from {1} to {2}".format(mig[3], mig[0], mig[1]))
         print("openstack server migrate --live {0} --wait {1}".format(mig[1], mig[2]))
 
-    print("### Plan Summary:")
-    print("### Total migrations: {0}".format(len(PlanList)))
-    print(getMigSummTable(HypervisorDict))
+    if not baremode:
+        print("### Plan Summary:")
+        print("### Total migrations: {0}".format(len(PlanList)))
+        print(getMigSummTable(HypervisorDict))
 
 if __name__ == "__main__":
     main()
