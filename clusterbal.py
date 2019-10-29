@@ -110,10 +110,8 @@ class flavorCache:
         self.__flavors[flavid] = { 'name': name, 'ram': ram, 'vcpus': vcpus, 'disk': disk, 'ephemeral': ephemeral }
 
 DEBUG=True      # Add extra messages?
-TOLERANCE=0.05  # How close in fullness percentage the hypervisors should be
 
 HypervisorDict = {} # Store osHyperVisor objects here
-Flavors = flavorCache()
 
 def getHypervisors(cloud):
     """Get hypervisors and add them to HypervisorList."""
@@ -121,11 +119,11 @@ def getHypervisors(cloud):
         hinfo = osHypervisor(host['hypervisor_hostname'], host['memory_mb'], host['memory_mb_used'])
         HypervisorDict[host['hypervisor_hostname']] = (hinfo)
 
-def getFlavorInfo(cloud, flavor):
+def getFlavorInfo(cloud, fcache, flavor):
     """Given a flavor in cloud, return a tuple of data about it: [ram, vcpus, disk, ephemeral ].
        Also use the "Flavors" global cache object to reduce the number of API calls to make for
        flavors we already have looked up."""
-    if not Flavors.flavorExists(flavor):
+    if not fcache.flavorExists(flavor):
         # Need to look up the flavor via the API instead.
         if DEBUG:
             print("Issuing API call to look up flavor {}".format(flavor))
@@ -135,11 +133,11 @@ def getFlavorInfo(cloud, flavor):
         fvcpus   = flavinfo['vcpus']
         fdisk    = flavinfo['disk']
         fephem   = flavinfo['ephemeral']
-        Flavors.addFlavor(flavor, name=fname, ram=fram, vcpus=fvcpus, disk=fdisk, ephemeral=fephem)
+        fcache.addFlavor(flavor, name=fname, ram=fram, vcpus=fvcpus, disk=fdisk, ephemeral=fephem)
     
-    return ( Flavors.getFlavorResource(flavor, 'ram'),
-             Flavors.getFlavorResource(flavor, 'vcpus'),
-             Flavors.getFlavorResource(flavor, 'disk')
+    return ( fcache.getFlavorResource(flavor, 'ram'),
+             fcache.getFlavorResource(flavor, 'vcpus'),
+             fcache.getFlavorResource(flavor, 'disk')
            )
 
 def getFullestHyperMem():
@@ -185,6 +183,8 @@ def main():
     """The main program here."""
     cloud = shade.OpenStackCloud()
     PlanList = [] # List of actions to take, in tuple form: (srchyper, desthyper, instance_id, memsize)
+    Flavors = flavorCache()  # A cache of flavor definitions
+    TOLERANCE=0.05  # How close in fullness percentage the hypervisors should be
 
     # Get basic information about our hypervisors, and store into global list "HypervisorList"
     try:
@@ -200,7 +200,7 @@ def main():
             sid     = s['id']
             sname   = s['name']
             sflavor = s['flavor']['id']
-            ( sram, svcpus, sdisk ) = getFlavorInfo(cloud, sflavor)
+            ( sram, svcpus, sdisk ) = getFlavorInfo(cloud, Flavors, sflavor)
             if DEBUG:
                 print("Adding {} to {}'s instance list".format(sname, hname))
             # Don't modify hypervisor memory; we already have a total
