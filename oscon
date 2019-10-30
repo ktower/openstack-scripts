@@ -1,0 +1,16 @@
+#!/bin/bash
+# Quick script to get a console URL for an OpenStack instance
+# Author: Kevin Tower
+
+if [ $# -ne 1 ]; then
+   echo "USAGE: $0 server-name"
+   exit 1
+fi
+
+oscmd=$(which openstack)
+if [ ! $? ]; then
+   echo "'openstack' binary not found in your path"
+   exit 1
+fi
+
+$oscmd console url show $1 -c url -f value

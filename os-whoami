@@ -1,0 +1,17 @@
+echo "Auth-URL  : ${OS_AUTH_URL}"
+# If domain is null, just return a user name
+if [ -z ${OS_USER_DOMAIN_NAME+x} ]; then
+   echo "Username  : ${OS_USERNAME}"
+else
+   echo "Username  : ${OS_USER_DOMAIN_NAME}\\${OS_USERNAME}"
+fi
+
+# Note whether token auth is enabled
+# $OS_TOKEN should be defined and $OS_AUTH_TYPE should be set to "token"
+if [ "x${OS_TOKEN+x}" != "x" -a "x${OS_AUTH_TYPE}" = "xtoken" ]; then
+   echo "Auth-Type : token"
+else
+   echo "Auth-Type : password"
+fi
+
+echo "Project   : ${OS_PROJECT_NAME}"

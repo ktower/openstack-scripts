@@ -1,0 +1,11 @@
+#!/bin/bash
+#
+# A quick script that will show all active VLANs present in an OpenStack deployment
+# Pre-req: Must be an administrative user on the OpenStack Deployment
+#          OpenStack CLI installed and configured properly
+
+OS_NETS=$(openstack network list --provider-network-type vlan -c Name -f value)
+
+for i in $OS_NETS; do
+   openstack network show $i -c provider:segmentation_id -f value
+done | sort -n
