@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+# Switch from password auth to token-based auth
+OS_TOKEN=$(openstack token issue -f value -c id)
+if [ "x${OS_TOKEN}" = "x" ]; then
+   echo "ERROR: Unable to retrieve token"
+else
+   export OS_TOKEN
+   export OS_AUTH_TYPE=token
+   unset OS_PASSWORD
+   unset OS_USER_DOMAIN_NAME
+fi
