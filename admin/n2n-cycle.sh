@@ -44,7 +44,7 @@ if [ $DOIT != "yes" ]; then
 fi
 echo "This script will live migrate all instances currently assigned to $SRCHOST to $DESTHOST"
 echo "one at a time and then migrate them back to $SRCHOST"
-instsondest=$(openstack server list --all-projects --host $DESTHOST --status -c Name -f value)
+instsondest=$(openstack server list --all-projects --host $DESTHOST -c Name -f value)
 numinst=$(echo "${instsondest}" | wc -l)
 if [ $numinst -gt 0 ]; then
    echo "NOTE: There are currently $numinst instances running on $DESTHOST:"
