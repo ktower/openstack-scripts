@@ -44,8 +44,7 @@ if [ $DOIT != "yes" ]; then
 fi
 echo "This script will live migrate all instances currently assigned to $SRCHOST to $DESTHOST"
 echo "one at a time and then migrate them back to $SRCHOST"
-# For cycling purposes, we only want running instances
-instsondest=$(openstack server list --all-projects --host $DESTHOST --status ACTIVE -c Name -f value)
+instsondest=$(openstack server list --all-projects --host $DESTHOST --status -c Name -f value)
 numinst=$(echo "${instsondest}" | wc -l)
 if [ $numinst -gt 0 ]; then
    echo "NOTE: There are currently $numinst instances running on $DESTHOST:"
@@ -59,7 +58,8 @@ if [ "x$usercontinue" != "xY" ]; then
    exit 0
 fi
 
-for inst in $(openstack server list --all-projects --host $SRCHOST -c ID -f value); do
+# For cycling purposes, we only want running instances
+for inst in $(openstack server list --all-projects --host $SRCHOST --status ACTIVE -c ID -f value); do
     openstack server show $inst | awk '/ name / {print $4}'
     if [ $DOIT == "yes" ]; then
        openstack server migrate --live $DESTHOST $WAITFLAG $inst
