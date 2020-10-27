@@ -8,7 +8,7 @@ cffi==1.12.3
 chardet==3.0.4
 cliff==2.16.0
 cmd2==0.8.9
-cryptography==2.7
+cryptography==3.2
 debtcollector==1.22.0
 decorator==4.4.0
 dogpile.cache==0.8.0
